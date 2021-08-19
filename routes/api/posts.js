@@ -170,6 +170,83 @@ router.put('/like/:id', auth, async (req, res) => {
     }
 })
 
+// @route    POST api/posts/comment/:id
+// @desc     Add comment to a post 
+// @access   Private 
+
+router.post('/comment/:id', [
+    auth,
+    [
+        check('text', 'Text is required').not().isEmpty()
+    ]
+],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        try {
+            const post = await Post.findById(req.params.id);
+            const user = await User.findById(req.user.id).select('-password');
+
+            if (!post) {
+                return res.status(404).json({ msg: 'Post not found' })
+            }
+
+            const commentFields = {
+                text: req.body.text,
+                user: req.user.id,
+                name: user.name,
+                avatar: user.avatar
+            };
+
+            post.comments.unshift(commentFields);
+            await post.save();
+            res.json(post.comments);
+        } catch (err) {
+            console.error(err.message);
+            res.status(500).send('Server error');
+
+        }
+    })
+
+// @route    DELETE api/posts/comment/:id/:comment_id
+// @desc     Delete comment of a post 
+// @access   Private 
+
+router.delete('/comment/:id/:comment_id', auth, async (req, res) => {
+    try {
+        const post = await Post.findById(req.params.id);
+
+        if (!post) {
+            return res.status(404).json({ msg: 'Post not found' })
+        }
+
+        //Check comment
+        // const comment = post.comments.find(comment => comment.id === req.params.comment_id);
+        const commentIndex = post.comments.map(comment => comment._id.toString()).indexOf(req.params.comment_id);
+        if (commentIndex == -1) {
+            return res.status(404).send('Comment not found')
+        }
+
+
+        //Check user of the post vs user of the request
+        if (post.user.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'Not authorized to delete the post' });
+        };
+
+
+        post.comments = post.comments.filter(comment => comment._id.toString() !== req.params.comment_id);
+        await post.save();
+
+        res.json(post.comments);
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+})
 
 
 module.exports = router;
